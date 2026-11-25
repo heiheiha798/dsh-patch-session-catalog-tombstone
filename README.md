@@ -15,6 +15,22 @@ re-appliable, verifiable and idempotent.
 - Patch style: exact-string substitution with asserted upstream anchors,
   **never line numbers**, so upstream drift fails closed.
 
+## Check a profile after a dsh upgrade
+
+A `dsh` upgrade can leave a patch layer referencing a package subpath the new
+release stopped exporting (this kit itself had to re-derive its anchors for
+0.2.2). Boot stays clean because presets mount lazily, so the failure only shows
+up when a session is created. Scan the composed tree first:
+
+```sh
+node scripts/check-entry-names.mjs --profile web
+node scripts/check-entry-names.mjs --config layer.yml
+```
+
+Every plugin `name:` is resolved from the install root and from the profile's
+own `node_modules`; stale names are printed with their line numbers and the
+original resolution error.
+
 ## The bug this fixes
 
 `subagent/catalog` facts are append-only discovery history. Deleting a child
