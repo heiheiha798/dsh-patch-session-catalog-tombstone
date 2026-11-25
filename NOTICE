@@ -1,0 +1,13 @@
+dsh-patch-session-catalog-tombstone
+===================================
+
+The patches in patches/ are unified diffs against compiled bundles published in
+the DeepSeek Harness npm packages (@deepseek-ai/dsh-subagent,
+@deepseek-ai/dsh-session-persistence-jsonl,
+@deepseek-ai/dsh-session-format-v3-to-v4, version 0.2.1-rc.5). DeepSeek Harness
+is MIT licensed: Copyright (c) 2026 DeepSeek. The upstream license text is in
+LICENSE.upstream and applies to the code those diffs modify.
+
+The scripts, tests and fixtures in this repository are original work released
+under the MIT license in LICENSE; fixtures/ contains the minimal excerpts of
+the upstream bundles needed to exercise the rules offline.

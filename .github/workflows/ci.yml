@@ -1,0 +1,38 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: unit tests (node --test)
+        run: node --test
+      - name: apply --dry-run on fixtures (must not write)
+        run: |
+          before=$(git status --porcelain)
+          node scripts/apply.mjs --root fixtures/pristine --dry-run
+          node scripts/apply.mjs --root fixtures/pristine --version
+          after=$(git status --porcelain)
+          if [ "$before" != "$after" ]; then
+            echo "apply --dry-run modified the working tree" >&2
+            exit 1
+          fi
+      - name: apply, --check and verify on a temp copy
+        run: |
+          tmp=$(mktemp -d)
+          cp -R fixtures/pristine/. "$tmp"/
+          node scripts/apply.mjs --root "$tmp"
+          node scripts/apply.mjs --root "$tmp" --check
+          node scripts/verify.mjs --root "$tmp"

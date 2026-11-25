@@ -1,0 +1,51 @@
+--- lib/index.js
++++ lib/index.js
+@@ -722,11 +722,16 @@
+ 	version: z$1.literal(1),
+ 	mode: z$1.literal("unknown")
+ });
++const removedCatalogSchema = oneShotCatalogSchema.extend({
++	version: z$1.literal(3),
++	mode: z$1.literal("removed")
++});
+ const eventDataSchema = z$1.union([
+ 	oneShotCatalogSchema,
+ 	externalCatalogSchema,
+ 	continuableCatalogSchema,
+-	unknownCatalogSchema
++	unknownCatalogSchema,
++	removedCatalogSchema
+ ]);
+ const viewSchema = z$1.array(z$1.union([
+ 	oneShotCatalogSchema.omit({
+@@ -773,7 +778,12 @@
+ */
+ function subagentCatalogEntries(state) {
+ 	const entries = [];
++	const removed = new Set();
+ 	for (const data of iterateChunkedList(state.head)) {
++		if (data.mode === "removed") {
++			removed.add(data.childId);
++			continue;
++		}
+ 		const { version: _version, childId, childCreatedAt, ...descriptor } = data;
+ 		entries.push({
+ 			id: childId,
+@@ -781,7 +791,7 @@
+ 			...descriptor
+ 		});
+ 	}
+-	return entries;
++	return removed.size === 0 ? entries : entries.filter((entry) => !removed.has(entry.id));
+ }
+ /** Parent-owned direct-child catalog projection; invalid own facts reject restoration. */
+ const subagentCatalogProjectionDefinition = {
+@@ -795,7 +805,7 @@
+ 			head: appendChunkedList(state.head, eventDataSchema.parse(event.data))
+ 		};
+ 	},
+-	stateVersion: 6,
++	stateVersion: 7,
+ 	wire: {
+ 		viewSchema,
+ 		view: subagentCatalogEntries
