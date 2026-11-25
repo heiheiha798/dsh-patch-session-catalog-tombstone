@@ -47,13 +47,59 @@ Semantics that matter for the backport:
 
 ## Why a patch kit is needed
 
-The published `@deepseek-ai/*` bundles for `0.2.1-rc.5` predate this commit
-(the bundled source regions match the pre-commit versions in the table above),
-and upstream did not take the change into the shipped line. The working
-installation was therefore patched by hand in compiled form. `dsh update`
-reinstalls `node_modules` from npm, which reverts every file to pristine and
-wipes the hand edit — hence the scripts in this repository re-apply it
-deterministically after each update.
+The published `@deepseek-ai/*` bundles predate this commit (the bundled source
+regions match the pre-commit versions in the table above), and upstream did not
+take the change into the shipped line. `dsh update` reinstalls `node_modules`
+from npm, which reverts every file to pristine and wipes any hand edit — hence
+the scripts in this repository re-apply it deterministically after each update.
+
+## Status against 0.2.2-rc.5 (`9c2670d3bc`)
+
+**Not fixed upstream; the kit is still required.** Checked at tag
+`dsh-v0.2.2-rc.5` = `9c2670d3bce5275e0d1610272958121af87787bb` and against the
+installed `0.2.2-rc.5` bundles:
+
+| Evidence | 0.2.2 source | Installed bundle |
+| --- | --- | --- |
+| No `removed` catalog mode / schema | `packages/subagent/subagent/src/catalog.ts` — `eventDataSchema` union ends at `namedExternalCatalogSchema`; `SubagentCatalogEvent` v3 admits only `continuable`/`external` | `dsh-subagent/lib/index.js:813-851` (schemas), `:844-851` (union) |
+| Projection still publishes every fact | same file — `subagentCatalogEntries` pushes every folded fact and `return entries`, `stateVersion: 6` | `dsh-subagent/lib/index.js:897-923` |
+| Restore rejects a tombstone | `packages/session/session-format-v3-to-v4/src/facts.ts` — `nativeCatalogFact` requires v3 `mode` to be `continuable`/`external` and `name` to be a string | `dsh-session-format-v3-to-v4/lib/index.js:1055-1061` |
+| Relationship validator only adds ids | `packages/session/session-format-v3-to-v4/src/validation.ts` — `ids.add(id)` after the duplicate check, `names.add(name)` for named facts | `dsh-session-format-v3-to-v4/lib/index.js:1027-1048`; the same region inlined at `dsh-session-persistence-jsonl/lib/worker.cjs:12726-12747` |
+| Deletion is still an external capability | `packages/workspace/workspace/README.md` — "Removal never deletes data"; `packages/session/session-persistence-jsonl/README.md` — "Nothing deletes session files" | no delete op in `dsh-session-persistence-jsonl/lib/worker.cjs` |
+| Agent-team rows come from the catalog | `packages/team/agent-team/src/types.ts` keeps roster snapshots only as history; the team UI counts `subagentCatalog` | `dsh-client-ui-agent-team/lib/client.js` (`subagentCatalog?.length`) |
+| Ghost still surfaces in discovery | `packages/subagent/subagent/src/list-children.ts` — `listDescendants` emits a `child` row with `activity: 'inactive'` from the catalog entry even when no session exists | `dsh-subagent/lib/types/list-children.js:100-156` (catalog row at `:152`) |
+
+The producer of the tombstone is the companion plugin
+`dsh-plugin-subagent-delete` (`retireCatalogRow` appends
+`{ version: 3, childId, childCreatedAt, mode: "removed" }`); upstream still has
+no retirement API, so the reader-side backport remains necessary.
+
+### 0.2.2 re-derivation (why the old anchors stopped matching)
+
+`0.2.2-rc.5` did not change the bug, but it did change the compiled regions, so
+every anchor was re-derived against the installed bundles:
+
+| Change in 0.2.2 | Rule affected | New anchor |
+| --- | --- | --- |
+| Catalog v3 facts gained a mandatory `name`; two named schemas were added to the union | `subagent.catalog-v3-schema` | the six-entry `eventDataSchema` union (`namedContinuableCatalogSchema`, `namedExternalCatalogSchema`) |
+| JSDoc above the projection changed and `return entries;` is no longer unique | `subagent.catalog-entries-filter` | the three lines above the return (`});` / `}` / `return entries;`), which are unique |
+| `stateVersion` is still 6, so the bump rule is unchanged | `subagent.catalog-state-version` | unchanged shape |
+| The projection fold is unchanged | `subagent.catalog-entries-collect` | unchanged shape |
+| Native v3 payloads now go through the new `nativeCatalogFact`, which only delegates v0–v2 to `catalogFact` | `persistence.catalog-v3-removed`, `format.catalog-v3-removed` | insert the guard at the top of `nativeCatalogFact`; `catalogFact` is deliberately left untouched (a v3 tombstone can only exist in native v4 logs) |
+| The relationship validator now also tracks unique child `name`s | `*.catalog-tombstone-delete`, `*.catalog-names-by-id` | tombstone deletes the id and drops its `id → name` record; a new `namesById` map records names as they are admitted |
+
+The name release is a 0.2.2-specific addition to the original backport: because
+the retracted view no longer reserves a deleted child's name, the live manager
+can hand the same name (including the automatic first-free `agent-N`) to a new
+sibling. Without the release, such a log would fail restoration with
+`duplicate catalog child name …` even though the live tree accepted the
+creation.
+
+The patch set still spans the same three packages and files; no package was
+renamed or merged. `dsh-subagent/lib/types/catalog.js` carries a second copy of
+the projection source but is not imported by `lib/index.js` or by any other
+installed package (the bundle inlines the region), so it is intentionally not a
+target.
 
 ## How the compiled rules map to source
 
@@ -66,25 +112,29 @@ exact-string rules over the bundled files (see `scripts/spec.mjs`):
 | `subagentCatalogEntries` collects tombstones | `subagent.catalog-entries-collect` | `dsh-subagent/lib/index.js` |
 | `subagentCatalogEntries` filters retired rows | `subagent.catalog-entries-filter` | `dsh-subagent/lib/index.js` |
 | `stateVersion` 6 → 7 | `subagent.catalog-state-version` | `dsh-subagent/lib/index.js` |
-| `facts.ts` version-3 / removed admission | `format.catalog-v3-removed` | `dsh-session-format-v3-to-v4/lib/index.js` |
-| `validation.ts` tombstone delete branch | `format.catalog-tombstone-delete` | `dsh-session-format-v3-to-v4/lib/index.js` |
-| Same validator, duplicated into the persistence worker bundle | `persistence.catalog-v3-removed`, `persistence.catalog-tombstone-delete` | `dsh-session-persistence-jsonl/lib/worker.cjs` |
+| `facts.ts` version-3 / removed admission (`nativeCatalogFact`) | `format.catalog-v3-removed` | `dsh-session-format-v3-to-v4/lib/index.js` |
+| `validation.ts` tombstone id/name retirement | `format.catalog-tombstone-delete`, `format.catalog-names-by-id` | `dsh-session-format-v3-to-v4/lib/index.js` |
+| Same validator, duplicated into the persistence worker bundle | `persistence.catalog-v3-removed`, `persistence.catalog-tombstone-delete`, `persistence.catalog-names-by-id` | `dsh-session-persistence-jsonl/lib/worker.cjs` |
 
 The `validation.ts` logic is bundled into both
 `dsh-session-format-v3-to-v4/lib/index.js` and
-`dsh-session-persistence-jsonl/lib/worker.cjs` (the worker imports the format
-package's compiled output inline), which is why the same two rules appear in
-both files. `retireCatalogChild` is a producer-side API that no compiled caller
+`dsh-session-persistence-jsonl/lib/worker.cjs` (the worker inlines the compiled
+output instead of importing the format package), which is why the same three
+rules appear in both files. In 0.2.2 the main persistence bundle does import
+`assertReleasedV4Relationships` from `@deepseek-ai/dsh-session-format-v3-to-v4`,
+so both copies still have to be patched for the main thread and the worker
+threads. `retireCatalogChild` is a producer-side API that no compiled caller
 in these bundles uses; it is intentionally not part of this kit — the installed
 build only needs the *reader* side to restore sessions containing tombstones.
 
 ## Reproducing the diffs
 
-`patches/` was generated from the pristine `0.2.1-rc.5` package files and the
-hand-patched installed files:
+`patches/` was generated from the pristine installed `0.2.2-rc.5` files and the
+spec-applied output (the same bytes `scripts/apply.mjs` writes):
 
 ```bash
-cd <pristine-package-dir> && diff -u lib/index.js <patched-package-dir>/lib/index.js
+cd <pristine-package-dir> && diff -u --label lib/index.js --label lib/index.js \
+  lib/index.js <patched-package-dir>/lib/index.js
 ```
 
 Paths in every `.patch` are relative to the package directory, matching the

@@ -11,7 +11,7 @@ reinstalls `node_modules` from npm and wipes the edit — this kit makes the edi
 re-appliable, verifiable and idempotent.
 
 - Runtime: **Node >= 22**, **zero dependencies**.
-- Verified against: **`@deepseek-ai/*` 0.2.1-rc.5** (see the table below).
+- Verified against: **`@deepseek-ai/*` 0.2.2-rc.5** (see the table below).
 - Patch style: exact-string substitution with asserted upstream anchors,
   **never line numbers**, so upstream drift fails closed.
 
@@ -33,11 +33,18 @@ It backports upstream commit `93e0ef008f` (see
 2. **Projection retracts the row** — `subagentCatalogEntries` records
    tombstoned child ids and filters them out of the published view; the catalog
    projection `stateVersion` goes 6 → 7 (`dsh-subagent`).
-3. **Restore validators accept the tombstone** — `catalogFact` admits
-   `version === 3 && mode === "removed"`, and the relationship validator lets a
-   tombstone `ids.delete(childId)` instead of tripping duplicate detection
+3. **Restore validators accept the tombstone** — in 0.2.2 every native v3
+   catalog payload passes `nativeCatalogFact`, so that function admits
+   `version === 3 && mode === "removed"`; the relationship validator lets a
+   tombstone retire its child id instead of tripping duplicate detection
    (`dsh-session-format-v3-to-v4` and the same validator inlined into
    `dsh-session-persistence-jsonl/lib/worker.cjs`).
+4. **Retired names are released** — 0.2.2 added a per-parent child `name`
+   (unique among siblings) and the validator rejects a duplicate name on
+   restore. Because the retracted view no longer reserves a deleted child's
+   name, the live manager can hand that name (or its automatic `agent-N`) to a
+   new sibling. The validator therefore remembers `id → name` and drops the
+   name together with the id, so such a log stays restorable.
 
 The log stays append-only and the **session format stays v4**; only the
 projection state version changes.
@@ -47,10 +54,10 @@ projection state version changes.
 | Package | File | Marker asserted |
 | --- | --- | --- |
 | `@deepseek-ai/dsh-subagent` | `lib/index.js` | `removedCatalogSchema` declared; `removed` admitted to the `eventDataSchema` union; `removed.size === 0` filter in `subagentCatalogEntries`; `stateVersion: 7` |
-| `@deepseek-ai/dsh-session-persistence-jsonl` | `lib/worker.cjs` | `catalogFact` early-returns `version === 3 && mode === "removed"`; tombstone `ids.delete(id)` branch |
-| `@deepseek-ai/dsh-session-format-v3-to-v4` | `lib/index.js` | same two changes in the format validator bundle |
+| `@deepseek-ai/dsh-session-persistence-jsonl` | `lib/worker.cjs` | `nativeCatalogFact` early-returns `version === 3 && mode === "removed"`; tombstone `ids.delete(id)` + `namesById` branch |
+| `@deepseek-ai/dsh-session-format-v3-to-v4` | `lib/index.js` | same three changes in the format validator bundle |
 
-`scripts/verify.mjs` asserts these as 9 byte-exact marker checks across the
+`scripts/verify.mjs` asserts these as 11 byte-exact marker checks across the
 three files and prints a pass/fail table.
 
 ## Re-apply after `dsh update`
@@ -132,9 +139,9 @@ affected sessions and deleted subagents reappear as catalog/sidebar rows.
 
 | Package | Version | File | Status |
 | --- | --- | --- | --- |
-| `@deepseek-ai/dsh-subagent` | 0.2.1-rc.5 | `lib/index.js` | verified (apply output byte-identical to hand-patched live file) |
-| `@deepseek-ai/dsh-session-persistence-jsonl` | 0.2.1-rc.5 | `lib/worker.cjs` | verified (same) |
-| `@deepseek-ai/dsh-session-format-v3-to-v4` | 0.2.1-rc.5 | `lib/index.js` | verified (same) |
+| `@deepseek-ai/dsh-subagent` | 0.2.2-rc.5 | `lib/index.js` | verified (all 4 anchors re-derived against the installed bundle) |
+| `@deepseek-ai/dsh-session-persistence-jsonl` | 0.2.2-rc.5 | `lib/worker.cjs` | verified (same) |
+| `@deepseek-ai/dsh-session-format-v3-to-v4` | 0.2.2-rc.5 | `lib/index.js` | verified (same) |
 
 `scripts/verify.mjs` prints the installed version for every row, so a future
 release is visible even if all markers still match; `apply --check` remains the
@@ -154,12 +161,14 @@ docs/upstream-source.md        upstream commit summary and rule mapping
 ```
 
 The fixtures are trimmed copies of the relevant bundle regions, not full
-packages; the suite covers idempotency, byte-exact output, `already applied`
-reporting, `--dry-run`/`--check`, missing-anchor failure and partial-patch
-refusal. `test/integration.test.mjs` additionally re-applies the patch to real
-pristine `0.2.1-rc.5` package copies and diffs the result against the live
-patched install; it is skipped automatically when those copies are absent (e.g.
-in CI).
+packages (the 0.2.2-rc.5 regions, including the v3 `name` schemas and the
+`nativeCatalogFact` / `names` validator additions); the suite covers
+idempotency, byte-exact output, `already applied` reporting,
+`--dry-run`/`--check`, missing-anchor failure and partial-patch refusal.
+`test/integration.test.mjs` additionally stages a copy of the installed
+0.2.2-rc.5 bundles, patches that copy, and asserts `--check`/`verify` pass,
+re-applying is a byte-level no-op, and the source install is never modified. It
+is skipped automatically when the dsh install is absent (e.g. in CI).
 
 ## Patches
 

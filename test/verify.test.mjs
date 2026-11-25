@@ -28,7 +28,7 @@ test('verify passes on patched fixtures and prints the full table', (t) => {
   assert.match(result.stdout, new RegExp(`${ASSERTIONS.length}/${ASSERTIONS.length} markers present`))
   for (const target of TARGET_FILES) {
     assert.match(result.stdout, new RegExp(target.package.replace(/[/@]/g, '\\$&')))
-    assert.match(result.stdout, /0\.2\.1-rc\.5/)
+    assert.match(result.stdout, /0\.2\.2-rc\.5/)
   }
   // Every assertion id must appear exactly once in the table.
   for (const assertion of ASSERTIONS) {

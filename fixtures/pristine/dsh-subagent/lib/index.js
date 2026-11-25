@@ -2,11 +2,22 @@ const unknownCatalogSchema = oneShotCatalogSchema.extend({
 	version: z$1.literal(1),
 	mode: z$1.literal("unknown")
 });
+const nameSchema = z$1.string().refine(isAgentName, "invalid agent name");
+const namedContinuableCatalogSchema = continuableCatalogSchema.extend({
+	version: z$1.literal(3),
+	name: nameSchema
+});
+const namedExternalCatalogSchema = externalCatalogSchema.extend({
+	version: z$1.literal(3),
+	name: nameSchema
+});
 const eventDataSchema = z$1.union([
 	oneShotCatalogSchema,
 	externalCatalogSchema,
 	continuableCatalogSchema,
-	unknownCatalogSchema
+	unknownCatalogSchema,
+	namedContinuableCatalogSchema,
+	namedExternalCatalogSchema
 ]);
 // ---- trimmed fixture region (not executable) ----
 function subagentCatalogEntries(state) {
@@ -21,7 +32,7 @@ function subagentCatalogEntries(state) {
 	}
 	return entries;
 }
-/** Parent-owned direct-child catalog projection; invalid own facts reject restoration. */
+/** Parent-owned catalog; version-6 checkpoints retain unnamed facts, and invalid own facts reject restoration. */
 const subagentCatalogProjectionDefinition = {
 	key: "subagentCatalog",
 	stateSchema,
@@ -37,3 +48,5 @@ const subagentCatalogProjectionDefinition = {
 	wire: {
 		viewSchema,
 		view: subagentCatalogEntries
+	}
+};

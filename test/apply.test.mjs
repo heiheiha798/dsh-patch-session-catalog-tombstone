@@ -1,6 +1,6 @@
 /**
  * Behavioural tests for scripts/apply.mjs, driven entirely by the synthetic
- * fixture tree in fixtures (trimmed regions of the real 0.2.1-rc.5
+ * fixture tree in fixtures (trimmed regions of the real 0.2.2-rc.5
  * bundles).  No test touches the live installation.
  */
 
@@ -104,7 +104,7 @@ test('missing upstream anchor fails closed, naming package/file/marker/version',
   assert.match(output, /@deepseek-ai\/dsh-subagent/)
   assert.match(output, /lib\/index\.js/)
   assert.match(output, /removedCatalogSchema/)
-  assert.match(output, /0\.2\.1-rc\.5/)
+  assert.match(output, /0\.2\.2-rc\.5/)
   assert.match(output, /no files were written/)
 
   // Fail-closed: no target file may be written when any preflight check fails.
@@ -153,7 +153,7 @@ test('--version prints every installed target package version', (t) => {
   for (const target of TARGET_FILES) {
     assert.match(result.stdout, new RegExp(target.package.replace(/[/@]/g, '\\$&')))
   }
-  assert.match(result.stdout, /0\.2\.1-rc\.5/)
+  assert.match(result.stdout, /0\.2\.2-rc\.5/)
 })
 
 test('missing install root is a non-zero, non-writing failure', (t) => {
