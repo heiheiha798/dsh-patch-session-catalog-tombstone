@@ -11,7 +11,7 @@ map back to source.
 | --- | --- |
 | Repository | `deepseek-harness` (local checkout used for provenance: a local checkout of `deepseek-harness` at the matching tag) |
 | Commit | `93e0ef008f63a3b6df61ef5b4d455250e9dde3d4` (`93e0ef008f`) |
-| Author | heiheiha798 `<143272889+heiheiha798@users.noreply.github.com>` |
+| Author | (address omitted in this public copy) |
 | Date | Thu Oct 22 16:07:23 2026 +0800 |
 | Subject | `feat(subagent): retire catalog rows when a child session is deleted` |
 | Size | 4 files, +64 / -6 |
